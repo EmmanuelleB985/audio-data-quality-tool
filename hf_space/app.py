@@ -163,107 +163,166 @@ def analyze_batch(files, expected_sr, min_dur, max_dur, snr_thresh):
     return "\n".join(lines)
 
 
+TITLE = "🎙️ Audio Data Quality Toolkit for TTS/ASR Training Pipelines"
+
+DESCRIPTION = """
+Detect clipping, silence, noisy samples, duplicate clips, transcript mismatch,
+speaker imbalance, and synthetic-data artifacts in speech datasets.
+
+Designed for TTS, ASR, voice-cloning, and synthetic speech evaluation workflows.
+"""
+
 with gr.Blocks(title="Audio Data Quality Toolkit", theme=gr.themes.Soft()) as demo:
+    gr.Markdown(f"# {TITLE}")
+    gr.Markdown(DESCRIPTION)
     gr.Markdown("""
-# Audio Data Quality Toolkit
 **Lint your audio datasets before training.** 13 automated checks for TTS, ASR, and voice-cloning pipelines.
 
 No GPU required. All checks run on CPU with numpy/scipy/librosa.
 
-Unlike perceptual scoring tools (NISQA, PESQ, UTMOS) that answer *"how good does this sound?"*,
-this toolkit answers *"is this file ready for training?"* -- catching the data engineering issues
-that silently degrade model quality.
+Unlike perceptual scoring tools such as NISQA, PESQ, or UTMOS, which answer *"how good does this sound?"*,
+this toolkit answers *"is this file ready for training?"* by catching the data-engineering issues that silently degrade model quality.
 """)
 
-    with gr.Tab("Single File"):
-        with gr.Row():
-            with gr.Column(scale=2):
-                audio_input = gr.Audio(type="filepath", label="Upload Audio")
-                transcript_input = gr.Textbox(
-                    label="Transcript (optional)",
-                    placeholder="If provided, checks chars-per-second alignment",
-                    lines=2,
-                )
-            with gr.Column(scale=1):
-                sr_choice = gr.Dropdown(
-                    choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
-                    value="Auto", label="Expected Sample Rate",
-                )
-                min_dur = gr.Number(value=0.5, label="Min Duration (s)")
-                max_dur = gr.Number(value=30.0, label="Max Duration (s)")
-                snr_thresh = gr.Number(value=20.0, label="SNR Threshold (dB)")
+    with gr.Tabs():
+        with gr.Tab("Single clip analysis"):
+            gr.Markdown("Upload one audio clip and inspect training-readiness quality signals.")
+            with gr.Row():
+                with gr.Column(scale=2):
+                    audio_input = gr.Audio(type="filepath", label="Upload audio clip")
+                    transcript_input = gr.Textbox(
+                        label="Optional transcript",
+                        placeholder="Paste the expected transcript here to check chars-per-second alignment...",
+                        lines=2,
+                    )
+                with gr.Column(scale=1):
+                    sr_choice = gr.Dropdown(
+                        choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
+                        value="Auto", label="Expected sample rate",
+                    )
+                    min_dur = gr.Number(value=0.5, label="Min duration (s)")
+                    max_dur = gr.Number(value=30.0, label="Max duration (s)")
+                    snr_thresh = gr.Number(value=20.0, label="SNR threshold (dB)")
 
-        analyze_btn = gr.Button("Run Quality Checks", variant="primary")
-        result_md = gr.Markdown(label="Results")
-        result_json = gr.Code(label="Full JSON", language="json")
+            analyze_btn = gr.Button("Analyze audio quality", variant="primary")
+            result_md = gr.Markdown(label="Quality report")
+            result_json = gr.Code(label="Full JSON", language="json")
 
-        analyze_btn.click(
-            analyze_single,
-            inputs=[audio_input, transcript_input, sr_choice, min_dur, max_dur, snr_thresh],
-            outputs=[result_md, result_json],
-        )
-
-    with gr.Tab("Batch (Directory)"):
-        gr.Markdown("Upload multiple audio files for batch analysis.")
-        batch_input = gr.File(
-            file_count="multiple",
-            file_types=["audio"],
-            label="Upload Audio Files",
-        )
-        with gr.Row():
-            b_sr = gr.Dropdown(
-                choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
-                value="Auto", label="Expected SR",
+            analyze_btn.click(
+                analyze_single,
+                inputs=[audio_input, transcript_input, sr_choice, min_dur, max_dur, snr_thresh],
+                outputs=[result_md, result_json],
             )
-            b_min = gr.Number(value=0.5, label="Min Duration (s)")
-            b_max = gr.Number(value=30.0, label="Max Duration (s)")
-            b_snr = gr.Number(value=20.0, label="SNR Threshold")
 
-        batch_btn = gr.Button("Run Batch Analysis", variant="primary")
-        batch_result = gr.Markdown(label="Batch Results")
+        with gr.Tab("Batch dataset audit"):
+            gr.Markdown(
+                "Upload multiple clips to generate a dataset-level QA report for TTS, ASR, voice-cloning, or synthetic speech pipelines."
+            )
+            batch_input = gr.File(
+                file_count="multiple",
+                file_types=["audio"],
+                label="Upload audio files",
+            )
+            with gr.Row():
+                b_sr = gr.Dropdown(
+                    choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
+                    value="Auto", label="Expected sample rate",
+                )
+                b_min = gr.Number(value=0.5, label="Min duration (s)")
+                b_max = gr.Number(value=30.0, label="Max duration (s)")
+                b_snr = gr.Number(value=20.0, label="SNR threshold (dB)")
 
-        batch_btn.click(
-            analyze_batch,
-            inputs=[batch_input, b_sr, b_min, b_max, b_snr],
-            outputs=[batch_result],
-        )
+            batch_btn = gr.Button("Run batch audit", variant="primary")
+            batch_result = gr.Markdown(label="Dataset quality report")
 
-    with gr.Tab("What It Checks"):
-        gr.Markdown("""
+            batch_btn.click(
+                analyze_batch,
+                inputs=[batch_input, b_sr, b_min, b_max, b_snr],
+                outputs=[batch_result],
+            )
+
+        with gr.Tab("Synthetic speech evaluation"):
+            gr.Markdown(
+                "Evaluate generated speech samples for clipping, silence, noise, duration anomalies, and transcript consistency."
+            )
+            with gr.Row():
+                with gr.Column(scale=2):
+                    synthetic_audio = gr.Audio(type="filepath", label="Generated speech sample")
+                    expected_text = gr.Textbox(
+                        label="Expected text",
+                        placeholder="Paste the prompt/text that the TTS system was supposed to speak...",
+                        lines=3,
+                    )
+                with gr.Column(scale=1):
+                    synth_sr = gr.Dropdown(
+                        choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
+                        value="Auto", label="Expected sample rate",
+                    )
+                    synth_min = gr.Number(value=0.5, label="Min duration (s)")
+                    synth_max = gr.Number(value=60.0, label="Max duration (s)")
+                    synth_snr = gr.Number(value=20.0, label="SNR threshold (dB)")
+
+            synth_button = gr.Button("Evaluate synthetic sample", variant="primary")
+            synth_output = gr.Markdown(label="Synthetic speech QA")
+            synth_json = gr.Code(label="Full JSON", language="json")
+
+            synth_button.click(
+                analyze_single,
+                inputs=[synthetic_audio, expected_text, synth_sr, synth_min, synth_max, synth_snr],
+                outputs=[synth_output, synth_json],
+            )
+
+        with gr.Tab("About"):
+            gr.Markdown("""
+## What this tool checks
+
+- **Clipping:** waveform peaks too close to maximum amplitude
+- **Silence:** long leading, trailing, or internal silent regions
+- **Noise:** low signal quality, background hum, hiss, or abnormal energy profile
+- **Transcript mismatch:** audio duration may not match the expected text length
+- **Speaker imbalance:** some speakers may dominate the dataset *(roadmap / metadata-dependent)*
+- **Duplicates:** repeated or near-identical clips *(roadmap / fingerprinting-dependent)*
+- **Synthetic artifacts:** robotic, metallic, repeated, or degraded generated speech patterns
+
+## Why this matters
+
+Data quality directly affects TTS/ASR model stability, pronunciation, speaker consistency, alignment, and long-form generation quality.
+This Space is designed as a practical QA dashboard for speech datasets used in training and evaluating voice AI systems.
+
+## Current checks
+
 | # | Check | What It Catches | GPU? |
 |---|-------|----------------|------|
 | 1 | SNR Estimation | Background noise, hum, hiss | No |
 | 2 | Clipping Detection | Consecutive samples at max amplitude | No |
 | 3 | Silence Analysis | Excessive leading, trailing, or internal silence | No |
 | 4 | Sample Rate Validation | Non-standard or unexpected rates | No |
-| 5 | Duration Bounds | Too short (<0.5s) or too long (>30s) | No |
+| 5 | Duration Bounds | Too short or too long clips | No |
 | 6 | Loudness (LUFS) | Audio far from target loudness | No |
 | 7 | Metallic Artifacts | Robotic/metallic TTS artifacts | No |
 | 8 | Repetition Detection | Word/phrase loops via autocorrelation | No |
 | 9 | Channel Issues | Stereo, silent channels, phase inversion | No |
-| 10 | Upsampling Detection | Fake sample rates (8kHz upsampled to 22kHz) | No |
-| 11 | Transcript Ratio | Misaligned transcripts (chars-per-second) | No |
+| 10 | Upsampling Detection | Fake sample rates, e.g. 8kHz upsampled to 22kHz | No |
+| 11 | Transcript Ratio | Misaligned transcripts using chars-per-second | No |
 | 12 | Duplicate Detection | Near-duplicate files via fingerprinting | No |
-| 13 | Transcript Alignment | Audio vs text mismatch (optional Whisper) | Optional |
+| 13 | Transcript Alignment | Audio vs text mismatch with optional ASR | Optional |
 
-### How is this different from NISQA / PESQ / DataSpeech?
+## How is this different from NISQA / PESQ / DataSpeech?
 
 | Tool | What it does | GPU | Output |
 |------|-------------|-----|--------|
-| **NISQA** | Perceptual MOS score (1-5) | Yes | Quality score |
+| **NISQA** | Perceptual MOS score | Yes | Quality score |
 | **PESQ** | Reference-based quality score | No | Quality score |
-| **DataSpeech** | Annotate datasets for Parler-TTS training | Yes | NL descriptions |
+| **DataSpeech** | Annotate datasets for Parler-TTS training | Yes | Natural-language descriptions |
 | **This toolkit** | Pass/fail lint for training readiness | No | Report + clean manifest |
 
-DataSpeech answers "describe this audio's characteristics for TTS conditioning."
-This toolkit answers "should I include this file in my training set at all?"
-""")
+DataSpeech answers: *"describe this audio's characteristics for TTS conditioning."*  
+This toolkit answers: *"should I include this file in my training set at all?"*
 
-    gr.Markdown("""
 ---
-**Install:** `pip install audio-data-quality-toolkit`
-| [GitHub](https://github.com/EmmanuelleB985/audio-data-quality-toolkit)
-| **Python API:** `from audio_qa import check_file, check_directory, audit_hf_dataset`
+**Install:** `pip install audio-data-quality-toolkit`  
+[GitHub](https://github.com/EmmanuelleB985/audio-data-quality-toolkit)  
+**Python API:** `from audio_qa import check_file, check_directory, audit_hf_dataset`
 """)
 
 
