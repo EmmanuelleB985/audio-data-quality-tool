@@ -5,7 +5,6 @@ Upload audio files and get instant quality reports.
 No GPU required. Runs entirely on CPU.
 """
 from __future__ import annotations
-import tempfile
 import json
 from pathlib import Path
 
@@ -176,8 +175,7 @@ with gr.Blocks(title="Audio Data Quality Toolkit", theme=gr.themes.Soft()) as de
     gr.Markdown(f"# {TITLE}")
     gr.Markdown(DESCRIPTION)
     gr.Markdown("""
-**Lint your audio datasets before training.** 13 automated checks for TTS, ASR, and voice-cloning pipelines.
-
+**Lint your audio datasets before training.** Training-readiness checks for TTS, ASR, and voice-cloning pipelines, with roadmap support for duplicate detection, speaker balance, and ASR-based transcript alignment.
 No GPU required. All checks run on CPU with numpy/scipy/librosa.
 
 Unlike perceptual scoring tools such as NISQA, PESQ, or UTMOS, which answer *"how good does this sound?"*,
