@@ -23,4 +23,4 @@ Upload audio files and get instant quality reports. 13 automated checks, zero GP
 
 **Install locally:** `pip install audio-data-quality-toolkit`
 
-**GitHub:** [audio-data-quality-toolkit](https://github.com/YOUR_USERNAME/audio-data-quality-toolkit)
+**GitHub:** [audio-data-quality-toolkit](https://github.com/EmmanuelleB985/audio-data-quality-toolkit)
