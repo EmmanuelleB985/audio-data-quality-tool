@@ -31,7 +31,7 @@ Upload audio files and get instant quality reports. 13 automated checks, zero GP
 
 The toolkit runs 13 signal-level checks per file: SNR estimation, clipping detection, silence analysis, sample rate validation, duration bounds, loudness (LUFS), metallic artifact detection, repetition detection, channel issues, upsampling detection, transcript-audio ratio, duplicate fingerprinting, and a composite quality score (0-10).
 
-Everything runs on CPU with numpy, scipy, and librosa. No ML model, no GPU.
+Everything runs on CPU with numpy, scipy, and librosa.
 
 ## Quick start
 
@@ -64,7 +64,7 @@ We audited 500 samples each from LibriTTS-R, MLS English, and LibriSpeech on a f
 
 ### Per-check pass rates
 
-![Per-check pass rates heatmap across all three datasets](per_check_heatmap.png)
+![Per-check pass rates heatmap across all three datasets](per_check_datasets.png)
 
 | Check | LibriTTS-R | MLS English | LibriSpeech |
 |-------|-----------|-------------|-------------|
@@ -82,7 +82,7 @@ We audited 500 samples each from LibriTTS-R, MLS English, and LibriSpeech on a f
 
 ### Duration vs quality score
 
-![Duration vs quality score scatter plot across all three datasets](duration_vs_quality.png)
+![Duration vs quality score scatter plot across all three datasets](duration_vs_quality_score.png)
 
 ## Key findings
 
