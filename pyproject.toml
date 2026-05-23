@@ -1,0 +1,43 @@
+[project]
+name = "audio-data-quality-toolkit"
+version = "0.2.0"
+description = "Lint your audio datasets before training. 13 checks for TTS, ASR, and voice-cloning pipelines."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+keywords = ["audio", "quality", "tts", "speech", "dataset", "lint", "qa"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "soundfile>=0.12",
+    "librosa>=0.9",
+]
+
+[project.optional-dependencies]
+perceptual = ["nisqa>=0.2", "torch>=1.13"]
+transcript = ["openai-whisper>=20230918"]
+hf = ["datasets>=2.14,<4.0", "huggingface-hub>=0.16"]
+demo = ["gradio>=4.0", "streamlit>=1.28"]
+dev = [
+    "pytest>=7.0",
+    "audio-data-quality-toolkit[demo,hf]",
+]
+all = ["audio-data-quality-toolkit[perceptual,transcript,hf,demo]"]
+
+[project.scripts]
+audio-qa = "audio_qa.cli:main"
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/audio-data-quality-toolkit"
+Issues = "https://github.com/YOUR_USERNAME/audio-data-quality-toolkit/issues"
+
+[tool.setuptools.packages.find]
+include = ["audio_qa*"]
