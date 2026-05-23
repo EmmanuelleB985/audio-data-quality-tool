@@ -8,7 +8,7 @@ sdk_version: "4.44.1"
 app_file: app.py
 pinned: false
 license: mit
-short_description: Lint audio datasets for TTS/ASR/voice-cloning. 13 CPU-only checks.
+short_description: Lint audio datasets for TTS/ASR. 13 checks.
 tags:
   - audio
   - quality
