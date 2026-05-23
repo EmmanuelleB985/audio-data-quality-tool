@@ -1,0 +1,271 @@
+"""
+audio-data-quality-toolkit -- HuggingFace Space
+
+Upload audio files and get instant quality reports.
+No GPU required. Runs entirely on CPU.
+"""
+from __future__ import annotations
+import tempfile
+import json
+from pathlib import Path
+
+import gradio as gr
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from audio_qa.pipeline import check_file
+from audio_qa.checks.transcript_ratio import check_transcript_ratio
+
+
+def analyze_single(audio_path, transcript, expected_sr, min_dur, max_dur, snr_thresh):
+    if audio_path is None:
+        return "Upload an audio file to get started.", ""
+
+    expected = int(expected_sr) if expected_sr and expected_sr != "Auto" else None
+
+    result = check_file(
+        audio_path,
+        expected_sr=expected,
+        min_duration=float(min_dur),
+        max_duration=float(max_dur),
+        snr_threshold=float(snr_thresh),
+    )
+
+    if result.get("error"):
+        return "Error: %s" % result["error"], ""
+
+    if transcript and transcript.strip():
+        tr_check = check_transcript_ratio(result["duration_s"], transcript)
+        result["checks"].append(tr_check)
+        result["num_checks"] = len(result["checks"])
+        result["num_passed"] = sum(1 for c in result["checks"] if c.get("passed"))
+        result["all_passed"] = result["num_passed"] == result["num_checks"]
+
+    lines = []
+    status = "PASS" if result["all_passed"] else "ISSUES FOUND"
+    score = result.get("quality_score", 0)
+    grade = result.get("grade", "?")
+    lines.append("## %s -- Quality Score: %.1f / 10 (Grade %s)" % (status, score, grade))
+    lines.append("")
+    lines.append("**Duration:** %.2fs | **Sample Rate:** %d Hz | **Checks:** %d/%d passed" % (
+        result["duration_s"], result["sample_rate"],
+        result["num_passed"], result["num_checks"],
+    ))
+    lines.append("")
+
+    components = result.get("score_components", {})
+    if components:
+        lines.append("### Score Breakdown")
+        lines.append("")
+        for comp_name, comp_score in components.items():
+            bar_len = int(comp_score)
+            bar = "=" * bar_len + "." * (10 - bar_len)
+            lines.append("- **%s:** %s %.1f" % (comp_name.title(), bar, comp_score))
+        lines.append("")
+
+    for c in result["checks"]:
+        name = c["check"].replace("_", " ").title()
+        if c.get("passed"):
+            lines.append("- [PASS] **%s**" % name)
+        else:
+            severity = c.get("severity", "medium")
+            icon = "FAIL" if severity == "high" else "WARN"
+            detail_parts = []
+            for k, v in c.items():
+                if k in ("check", "passed", "severity"):
+                    continue
+                if isinstance(v, list) and v:
+                    detail_parts.append("%s: %s" % (k, "; ".join(str(x) for x in v)))
+                elif isinstance(v, float):
+                    detail_parts.append("%s=%.2f" % (k, v))
+                elif v is not None and not isinstance(v, list):
+                    detail_parts.append("%s=%s" % (k, v))
+            detail = " | ".join(detail_parts[:4])
+            lines.append("- [%s] **%s**: %s" % (icon, name, detail))
+
+    summary = "\n".join(lines)
+
+    json_output = json.dumps(result, indent=2, default=str)
+    return summary, json_output
+
+
+def analyze_batch(files, expected_sr, min_dur, max_dur, snr_thresh):
+    if not files:
+        return "Upload one or more audio files."
+
+    expected = int(expected_sr) if expected_sr and expected_sr != "Auto" else None
+    all_results = []
+
+    for f in files:
+        filepath = f.name if hasattr(f, 'name') else str(f)
+        result = check_file(
+            filepath,
+            expected_sr=expected,
+            min_duration=float(min_dur),
+            max_duration=float(max_dur),
+            snr_threshold=float(snr_thresh),
+        )
+        all_results.append(result)
+
+    n_total = len(all_results)
+    n_clean = sum(1 for r in all_results if r.get("all_passed"))
+    n_error = sum(1 for r in all_results if r.get("error"))
+
+    check_stats = {}
+    for r in all_results:
+        for c in r.get("checks", []):
+            name = c["check"]
+            if name not in check_stats:
+                check_stats[name] = {"passed": 0, "failed": 0}
+            if c.get("passed"):
+                check_stats[name]["passed"] += 1
+            else:
+                check_stats[name]["failed"] += 1
+
+    lines = []
+    lines.append("## Dataset Report")
+    lines.append("")
+
+    scores = [r.get("quality_score", 0) for r in all_results
+              if r.get("quality_score") is not None and not r.get("error")]
+    avg_score = sum(scores) / max(len(scores), 1) if scores else 0
+
+    lines.append("**Total:** %d files | **Clean:** %d (%.0f%%) | **Avg Score:** %.1f/10 | **Errors:** %d" % (
+        n_total, n_clean, n_clean / max(n_total, 1) * 100,
+        avg_score, n_error,
+    ))
+    lines.append("")
+    lines.append("### Per-Check Pass Rates")
+    lines.append("")
+    lines.append("| Check | Passed | Failed | Rate |")
+    lines.append("|-------|--------|--------|------|")
+    for name, counts in check_stats.items():
+        total = counts["passed"] + counts["failed"]
+        rate = counts["passed"] / max(total, 1) * 100
+        lines.append("| %s | %d | %d | %.0f%% |" % (
+            name.replace("_", " ").title(), counts["passed"], counts["failed"], rate
+        ))
+
+    lines.append("")
+    lines.append("### Flagged Files")
+    lines.append("")
+    for r in all_results:
+        if r.get("error"):
+            lines.append("- **ERROR** %s: %s" % (Path(r["file"]).name, r["error"]))
+        elif not r.get("all_passed"):
+            fname = Path(r["file"]).name
+            score = r.get("quality_score", 0)
+            grade = r.get("grade", "?")
+            failed = [c["check"] for c in r.get("checks", []) if not c.get("passed")]
+            lines.append("- **%s** (%.1f/10 %s): %s" % (fname, score, grade, ", ".join(failed)))
+
+    return "\n".join(lines)
+
+
+with gr.Blocks(title="Audio Data Quality Toolkit", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("""
+# Audio Data Quality Toolkit
+**Lint your audio datasets before training.** 13 automated checks for TTS, ASR, and voice-cloning pipelines.
+
+No GPU required. All checks run on CPU with numpy/scipy/librosa.
+
+Unlike perceptual scoring tools (NISQA, PESQ, UTMOS) that answer *"how good does this sound?"*,
+this toolkit answers *"is this file ready for training?"* -- catching the data engineering issues
+that silently degrade model quality.
+""")
+
+    with gr.Tab("Single File"):
+        with gr.Row():
+            with gr.Column(scale=2):
+                audio_input = gr.Audio(type="filepath", label="Upload Audio")
+                transcript_input = gr.Textbox(
+                    label="Transcript (optional)",
+                    placeholder="If provided, checks chars-per-second alignment",
+                    lines=2,
+                )
+            with gr.Column(scale=1):
+                sr_choice = gr.Dropdown(
+                    choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
+                    value="Auto", label="Expected Sample Rate",
+                )
+                min_dur = gr.Number(value=0.5, label="Min Duration (s)")
+                max_dur = gr.Number(value=30.0, label="Max Duration (s)")
+                snr_thresh = gr.Number(value=20.0, label="SNR Threshold (dB)")
+
+        analyze_btn = gr.Button("Run Quality Checks", variant="primary")
+        result_md = gr.Markdown(label="Results")
+        result_json = gr.Code(label="Full JSON", language="json")
+
+        analyze_btn.click(
+            analyze_single,
+            inputs=[audio_input, transcript_input, sr_choice, min_dur, max_dur, snr_thresh],
+            outputs=[result_md, result_json],
+        )
+
+    with gr.Tab("Batch (Directory)"):
+        gr.Markdown("Upload multiple audio files for batch analysis.")
+        batch_input = gr.File(
+            file_count="multiple",
+            file_types=["audio"],
+            label="Upload Audio Files",
+        )
+        with gr.Row():
+            b_sr = gr.Dropdown(
+                choices=["Auto", "16000", "22050", "24000", "44100", "48000"],
+                value="Auto", label="Expected SR",
+            )
+            b_min = gr.Number(value=0.5, label="Min Duration (s)")
+            b_max = gr.Number(value=30.0, label="Max Duration (s)")
+            b_snr = gr.Number(value=20.0, label="SNR Threshold")
+
+        batch_btn = gr.Button("Run Batch Analysis", variant="primary")
+        batch_result = gr.Markdown(label="Batch Results")
+
+        batch_btn.click(
+            analyze_batch,
+            inputs=[batch_input, b_sr, b_min, b_max, b_snr],
+            outputs=[batch_result],
+        )
+
+    with gr.Tab("What It Checks"):
+        gr.Markdown("""
+| # | Check | What It Catches | GPU? |
+|---|-------|----------------|------|
+| 1 | SNR Estimation | Background noise, hum, hiss | No |
+| 2 | Clipping Detection | Consecutive samples at max amplitude | No |
+| 3 | Silence Analysis | Excessive leading, trailing, or internal silence | No |
+| 4 | Sample Rate Validation | Non-standard or unexpected rates | No |
+| 5 | Duration Bounds | Too short (<0.5s) or too long (>30s) | No |
+| 6 | Loudness (LUFS) | Audio far from target loudness | No |
+| 7 | Metallic Artifacts | Robotic/metallic TTS artifacts | No |
+| 8 | Repetition Detection | Word/phrase loops via autocorrelation | No |
+| 9 | Channel Issues | Stereo, silent channels, phase inversion | No |
+| 10 | Upsampling Detection | Fake sample rates (8kHz upsampled to 22kHz) | No |
+| 11 | Transcript Ratio | Misaligned transcripts (chars-per-second) | No |
+| 12 | Duplicate Detection | Near-duplicate files via fingerprinting | No |
+| 13 | Transcript Alignment | Audio vs text mismatch (optional Whisper) | Optional |
+
+### How is this different from NISQA / PESQ / DataSpeech?
+
+| Tool | What it does | GPU | Output |
+|------|-------------|-----|--------|
+| **NISQA** | Perceptual MOS score (1-5) | Yes | Quality score |
+| **PESQ** | Reference-based quality score | No | Quality score |
+| **DataSpeech** | Annotate datasets for Parler-TTS training | Yes | NL descriptions |
+| **This toolkit** | Pass/fail lint for training readiness | No | Report + clean manifest |
+
+DataSpeech answers "describe this audio's characteristics for TTS conditioning."
+This toolkit answers "should I include this file in my training set at all?"
+""")
+
+    gr.Markdown("""
+---
+**Install:** `pip install audio-data-quality-toolkit`
+| [GitHub](https://github.com/EmmanuelleB985/audio-data-quality-toolkit)
+| **Python API:** `from audio_qa import check_file, check_directory, audit_hf_dataset`
+""")
+
+
+if __name__ == "__main__":
+    demo.launch()
